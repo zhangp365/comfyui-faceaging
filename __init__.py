@@ -75,7 +75,7 @@ class AgeTransformationNode:
         return {
             "required": {
                 "input_image": ("IMAGE",),
-                "target_age": ("INT", {"default": 5, "min": 0, "max": 100})
+                "target_age": ("INT", {"default": 5, "min": -100, "max": 100})
             }
         }
 
