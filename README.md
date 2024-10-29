@@ -1,5 +1,10 @@
 # Face Aging
 
+### Prerequisites
+- Linux or macOS
+- NVIDIA GPU + CUDA CuDNN (CPU may be possible with some modifications, but is not inherently supported)
+- Python 3
+
 ### Description
 - This is a comfyui custom node version of [Age Transformation](https://github.com/yuval-alaluf/SAM)
 - You could transform age of target from -100 to +100(but recommended -50 to +100)
