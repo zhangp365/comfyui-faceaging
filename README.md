@@ -15,7 +15,9 @@
 ```bash
 mkdir -p ComfyUI/models/face_aging
 pip install gdown
-gdown "https://drive.google.com/u/0/uc?id=1XyumF6_fdAxFmxpFcmPf-q84LU_22EMC&export=download" -O pretrained_models/sam_ffhq_aging.pt
+cd models
+gdown "https://drive.google.com/u/0/uc?id=1XyumF6_fdAxFmxpFcmPf-q84LU_22EMC&export=download" -O face_aging/sam_ffhq_aging.pt
+cd face_aging
 wget "https://github.com/italojs/facial-landmarks-recognition/raw/master/shape_predictor_68_face_landmarks.dat"
 ```
 3. **run the comfyUI and use it like this**
