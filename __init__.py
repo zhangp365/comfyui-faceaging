@@ -32,44 +32,60 @@ CURRENT_DIR = 'models/face_aging/'
 PREDICTOR_PATH = os.path.join(CURRENT_DIR, "shape_predictor_68_face_landmarks.dat")
 MODEL_PATH = os.path.join(CURRENT_DIR, "sam_ffhq_aging.pt")
 
-# Check and load shape predictor
-if not os.path.exists(PREDICTOR_PATH):
-    raise FileNotFoundError(f"Shape predictor not found at {PREDICTOR_PATH}")
-predictor = dlib.shape_predictor(PREDICTOR_PATH)
-
-# Define model paths dictionary
-model_paths = {
-    'psp_model': MODEL_PATH
-}
-
-# Check and load model
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
-
-# Load checkpoint
-ckpt = torch.load(MODEL_PATH, map_location='cpu')  # weights_only 인자 제거
-opts = ckpt.get('opts', {})
-opts['checkpoint_path'] = MODEL_PATH
-opts = Namespace(**opts)
-
-# Initialize and load the pSp model
-net = pSp(opts)
-net.eval()
-if torch.cuda.is_available():
-    net.cuda()
-logging.info('Model successfully loaded!')
-
-# Define image transformations
-transform = transforms.Compose([
-    transforms.Resize((256, 256)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-])
+class ModelLoader:
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ModelLoader, cls).__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        if not ModelLoader._initialized:
+            self.predictor = None
+            self.net = None
+            self.transform = None
+            ModelLoader._initialized = True
+    
+    def load_models(self):
+        if self.net is not None:
+            return
+            
+        # 加载 shape predictor
+        if not os.path.exists(PREDICTOR_PATH):
+            raise FileNotFoundError(f"Shape predictor not found at {PREDICTOR_PATH}")
+        self.predictor = dlib.shape_predictor(PREDICTOR_PATH)
+        
+        # 加载主模型
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model file not found at {MODEL_PATH}")
+            
+        ckpt = torch.load(MODEL_PATH, map_location='cpu')
+        opts = ckpt.get('opts', {})
+        opts['checkpoint_path'] = MODEL_PATH
+        opts = Namespace(**opts)
+        
+        self.net = pSp(opts)
+        self.net.eval()
+        if torch.cuda.is_available():
+            self.net.cuda()
+        logging.info('Model successfully loaded!')
+        
+        # 定义图像变换
+        self.transform = transforms.Compose([
+            transforms.Resize((256, 256)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+        ])
 
 class AgeTransformationNode:
     """
     ComfyUI Custom Node for Age Transformation using pSp.
     """
+    def __init__(self):
+        self.model_loader = None
+        
     @staticmethod
     def INPUT_TYPES():
         return {
@@ -94,25 +110,28 @@ class AgeTransformationNode:
         Returns:
             PIL.Image: The aged image.
         """
-
+        if self.model_loader is None:
+            self.model_loader = ModelLoader()
+            self.model_loader.load_models()
+        
         input_image = input_image.squeeze(0)
         input_image = input_image.permute(2, 0, 1)
         input_image = input_image.detach().cpu()
         input_image = transforms.ToPILImage()(input_image)
         
         # Align the input image
-        aligned_image = align_face(image=input_image, predictor=predictor)
+        aligned_image = align_face(image=input_image, predictor=self.model_loader.predictor)
         if aligned_image is None:
             raise ValueError("Face alignment failed.")
 
         # Preprocess the image
-        input_tensor = transform(aligned_image)
+        input_tensor = self.model_loader.transform(aligned_image)
 
         # Apply age transformation
         age_transformer = AgeTransformer(target_age=target_age)
         with torch.no_grad():
             input_image_age = age_transformer(input_tensor.cpu()).unsqueeze(0).to('cuda') # add batch dim
-            result_tensor = net(input_image_age.float(), randomize_noise=False, resize=False)[0]
+            result_tensor = self.model_loader.net(input_image_age.float(), randomize_noise=False, resize=False)[0]
             result_image = tensor2im(result_tensor)
             # result_image.save('/workspace/qscar/faceAging/test.png')
 
